@@ -9,11 +9,17 @@ int g_width = 500,
     g_height = 500,
     g_hwnd = 0;
 
+unsigned int frames = 0;
+
 
 void init(int, char*[]);
 void init_wnd(int, char*[]);
 void resize(int, int);
 void render(void);
+
+// timer handler
+void on_timer(int);
+void on_idle(void);
 
 int main(int argc, char* argv[]) {
     printf("OpenGL Book: Chapter 1\n");
@@ -64,6 +70,8 @@ void init_wnd(int argc, char* argv[]) {
 
     glutReshapeFunc(resize);
     glutDisplayFunc(render);
+    glutIdleFunc(on_idle);
+    glutTimerFunc(0, on_timer, 0); // delay, func, arg
 }
 
 void resize(int w, int h) {
@@ -76,7 +84,31 @@ void resize(int w, int h) {
 }
 
 void render(void) {
+    ++frames;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glutSwapBuffers();
     glutPostRedisplay();
+}
+
+void on_idle(void) {
+    glutPostRedisplay();
+}
+
+
+void on_timer(int val) {
+    if (val != 0) {
+        char* title = (char*) malloc(512 + strlen(WINDOW_TITLE_PREFIX));
+        sprintf(title, "%s (%d fps @ %d x %d)",
+                WINDOW_TITLE_PREFIX,
+                frames * 4, // 250ms
+                g_width,
+                g_height
+        );
+
+        glutSetWindowTitle(title);
+        free(title);
+    }
+
+    frames = 0; // reset frame counter.
+    glutTimerFunc(250, on_timer, 1); // Re-arm the timer.
 }
