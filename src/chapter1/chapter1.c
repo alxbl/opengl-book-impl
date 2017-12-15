@@ -25,8 +25,17 @@ int main(int argc, char* argv[]) {
 }
 
 void init(int argc, char* argv[]) {
+    GLenum glew_res;
 
     init_wnd(argc, argv);
+
+    glew_res = glewInit();
+
+    if (glew_res != GLEW_OK) {
+        fprintf(stderr, "ERROR: %s\n", glewGetErrorString(glew_res));
+        exit(EXIT_FAILURE);
+    }
+
     fprintf(stdout, "Open GL Version: %s\n", glGetString(GL_VERSION));
 
     glClearColor(0., 0., 0., 0.);
