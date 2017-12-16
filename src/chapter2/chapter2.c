@@ -123,7 +123,7 @@ void render(void) {
     ++frames;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the frame
 
-    glDrawArrays(GL_TRIANGLES, 0 , 3);
+    glDrawArrays(GL_TRIANGLES, 0 , 6);
 
     // Done painting, swap the buffer to the screen.
     glutSwapBuffers();
@@ -159,15 +159,23 @@ void cleanup(void) {
 
 void create_vbo(void) {
     GLfloat vertices[] = { // Some hardcoded vertices from the book.
+        -0.8f,  0.8f, 0.0f, 1.0f,
+         0.8f,  0.8f, 0.0f, 1.0f,
         -0.8f, -0.8f, 0.0f, 1.0f,
-         0.0f,  0.8f, 0.0f, 1.0f,
-         0.8f, -0.8f, 0.0f, 1.0f
+
+         -0.8f, -0.8f, 0.0f, 1.0f,
+          0.8f,  0.8f, 0.0f, 1.0f,
+          0.8f, -0.8f, 0.0f, 1.0f
     };
 
     GLfloat colors[] = {
         1.0f, 0.0f, 0.0f, 1.0f, // red
         0.0f, 1.0f, 0.0f, 1.0f, // green
         0.0f, 0.0f, 1.0f, 1.0f, // blue
+
+        0.0f, 0.0f, 1.0f, 1.0f,
+        0.0f, 1.0f, 0.0f, 1.0f,
+        1.0f, 1.0f, 1.0f, 1.0f
     };
 
     GLenum error = glGetError();
