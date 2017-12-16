@@ -5,13 +5,18 @@
 #include <GL/freeglut.h>
 #define WINDOW_TITLE_PREFIX "Chapter 2"
 
+typedef struct {
+    float v[4];
+    float c[4];
+} Vertex;
+
 int g_width = 500,
     g_height = 500,
     g_hwnd = 0;
 
 unsigned int frames = 0;
 
-GLuint vertex_shader_id, fragment_shader_id, prog_id, vao_id, vbo_id, color_buf_id;
+GLuint vertex_shader_id, fragment_shader_id, prog_id, vao_id, vbo_id;
 
 // A very simple vertex shader
 const GLchar* v_shader = {
@@ -123,7 +128,7 @@ void render(void) {
     ++frames;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the frame
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0 , 4);
+    glDrawArrays(GL_TRIANGLES, 0 , 3);
 
     // Done painting, swap the buffer to the screen.
     glutSwapBuffers();
@@ -158,43 +163,33 @@ void cleanup(void) {
 }
 
 void create_vbo(void) {
-    GLfloat vertices[] = { // Some hardcoded vertices from the book.
-        -0.8f,  0.8f, 0.0f, 1.0f,
-         0.8f,  0.8f, 0.0f, 1.0f,
-        // -0.8f, -0.8f, 0.0f, 1.0f, // This vertex will be inferred by triangle strips.
-
-         -0.8f, -0.8f, 0.0f, 1.0f,
-          // 0.8f,  0.8f, 0.0f, 1.0f, // This vertex will be inferred by triangle strips.
-          0.8f, -0.8f, 0.0f, 1.0f
-    };
-
-    GLfloat colors[] = {
-        1.0f, 0.0f, 0.0f, 1.0f, // red
-        0.0f, 1.0f, 0.0f, 1.0f, // green
-        // 0.0f, 0.0f, 1.0f, 1.0f, // blue
-
-        0.0f, 0.0f, 1.0f, 1.0f,
-        // 0.0f, 1.0f, 0.0f, 1.0f,
-        1.0f, 1.0f, 1.0f, 1.0f
+    Vertex vertices[] = {
+        //  Vertex Coords                Color
+        { { -0.8f, -0.8f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
+        { {  0.0f,  0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
+        { {  0.8f, -0.8f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } }
     };
 
     GLenum error = glGetError();
 
+    const size_t buffer_size = sizeof(vertices);
+    const size_t vertex_size = sizeof(vertices[0]);
+    const size_t color_offset = sizeof(vertices[0].v);
+
+    // Generate the Vertex Array Object and bind it.
     glGenVertexArrays(1, &vao_id);
     glBindVertexArray(vao_id);
 
-    // Vertices
+    // Generate the vertex buffer.
     glGenBuffers(1, &vbo_id);
     glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(0);
+    glBufferData(GL_ARRAY_BUFFER, buffer_size, vertices, GL_STATIC_DRAW);
 
-    // Colors
-    glGenBuffers(1, &color_buf_id);
-    glBindBuffer(GL_ARRAY_BUFFER, color_buf_id);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(colors), colors, GL_STATIC_DRAW);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+    // Define the data structure
+    // glVertexAttribPointer(layout, numvert, type, normalize, stride, ptr)
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, vertex_size, 0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, vertex_size, (GLvoid*)color_offset);
+    glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
 
     error = glGetError();
@@ -213,7 +208,6 @@ void delete_vbo(void) {
     glDisableVertexAttribArray(0);
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glDeleteBuffers(1, &color_buf_id);
     glDeleteBuffers(1, &vbo_id);
 
     glBindVertexArray(0);
