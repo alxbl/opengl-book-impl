@@ -60,7 +60,6 @@ void create_shaders(void);
 void delete_shaders(void);
 
 int main(int argc, char* argv[]) {
-    printf("OpenGL Book: Chapter 1\n");
 
     init(argc, argv);
     glutMainLoop();

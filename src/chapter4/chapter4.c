@@ -1,14 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <GL/glew.h>
-#include <GL/freeglut.h>
-#define WINDOW_TITLE_PREFIX "Chapter 4"
+#include "math/utils.h"
 
-typedef struct {
-    float v[4];
-    float c[4];
-} Vertex;
+#define WINDOW_TITLE_PREFIX "Chapter 4"
 
 int g_width = 500,
     g_height = 500,
@@ -16,33 +8,13 @@ int g_width = 500,
 
 unsigned int frames = 0;
 
-GLuint vertex_shader_id, fragment_shader_id, prog_id, vao_id, vbo_id, ibo_id[2], active_ibo = 0;
+GLuint proj_uloc, view_uloc, model_uloc, buffers[3] = { 0 }, shaders[3] = {0};
 
-// A very simple vertex shader
-const GLchar* v_shader = {
-    "#version 400\n"
-        "layout(location=0) in vec4 in_Position;\n"
-        "layout(location=1) in vec4 in_Color;\n"
-        "out vec4 ex_Color;\n"
+mat4_t proj_mat, view_mat, model_mat;
 
-        "void main(void)\n"
-        "{\n"
-        "  gl_Position = in_Position;\n"
-        "  ex_Color = in_Color;\n"
-        "}\n"
-};
+float cube_rot = 0;
+clock_t last_time = 0;
 
-// And a simple fragment shader to go with it.
-const GLchar* f_shader = {
-    "#version 400 \n"
-        "in vec4 ex_Color;\n"
-        "out vec4 out_Color;\n"
-
-        "void main(void)\n"
-        "{\n"
-        "  out_Color = ex_Color;\n"
-        "}\n"
-};
 void init(int, char*[]);
 void init_wnd(int, char*[]);
 void resize(int, int);
@@ -51,14 +23,16 @@ void render(void);
 // timer handler
 void on_timer(int);
 void on_idle(void);
+
+// Cube functions
+void create_cube(void);
+void delete_cube(void);
+void draw_cube(void);
+
 void on_keyboard(unsigned char, int, int);
 
 // shader stuff
 void cleanup(void);
-void create_vbo(void);
-void delete_vbo(void);
-void create_shaders(void);
-void delete_shaders(void);
 
 int main(int argc, char* argv[]) {
     init(argc, argv);
@@ -81,9 +55,22 @@ void init(int argc, char* argv[]) {
 
     fprintf(stdout, "Open GL Version: %s\n", glGetString(GL_VERSION));
 
-    create_shaders();
-    create_vbo();
+    glGetError();
     glClearColor(0., 0., 0., 0.);
+
+    // Setup culling
+    glEnable(GL_DEPTH_TEST);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+    exit_on_glError("ERROR: Unable to configure culling.");
+
+    model_mat = IDENTITY4;
+    proj_mat = IDENTITY4;
+    view_mat = IDENTITY4;
+
+    translate(&view_mat, 0, 0, -2);
+
+    create_cube();
 }
 
 void init_wnd(int argc, char* argv[]) {
@@ -121,18 +108,19 @@ void resize(int w, int h) {
 
     // x, y, w, h - bottom-left anchor point of the viewport.
     glViewport(0, 0, g_width, g_height);
-    // printf("Resized: %dx%d\n", w, h);
+
+    proj_mat = proj(60, (float)g_width / g_height, 1.0f, 100.0f);
+
+    glUseProgram(shaders[0]);
+    glUniformMatrix4fv(proj_uloc, 1, GL_FALSE, proj_mat.m);
+    glUseProgram(0);
 }
 
 void render(void) {
     ++frames;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the frame
 
-    // glDrawArrays(GL_TRIANGLES, 0 , 3); // Drawing only triangles...
-    if (active_ibo == 0)
-        glDrawElements(GL_TRIANGLES, 48, GL_UNSIGNED_BYTE, (GLvoid*) 0);
-    else
-        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_BYTE, (GLvoid*) 0);
+    draw_cube();
 
     // Done painting, swap the buffer to the screen.
     glutSwapBuffers();
@@ -162,8 +150,7 @@ void on_timer(int val) {
 }
 
 void cleanup(void) {
-    delete_shaders();
-    delete_vbo();
+    delete_cube();
 }
 
 void on_keyboard(unsigned char key, int x, int y) {
@@ -171,187 +158,119 @@ void on_keyboard(unsigned char key, int x, int y) {
         case 'T':
         case 't':
             {
-                active_ibo = active_ibo == 1 ? 0 : 1;
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[active_ibo]);
                 break;
             }
         default: break;
     }
 }
 
-void create_vbo(void) {
-    // Define all the vertices a single time.
-    Vertex vertices[] =
-    {
-        //  Vertex Coords                Color
-        { { 0.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 1.0f, 1.0f, 1.0f } },
-        // Top
-        { { -0.2f, 0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { 0.2f, 0.8f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
-        { { 0.0f, 0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
-        { { 0.0f, 1.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-        // Bottom
-        { { -0.2f, -0.8f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
-        { { 0.2f, -0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { 0.0f, -0.8f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
-        { { 0.0f, -1.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-        // Left
-        { { -0.8f, -0.2f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { -0.8f, 0.2f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
-        { { -0.8f, 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
-        { { -1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } },
-        // Right
-        { { 0.8f, -0.2f, 0.0f, 1.0f }, { 0.0f, 0.0f, 1.0f, 1.0f } },
-        { { 0.8f, 0.2f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f, 1.0f } },
-        { { 0.8f, 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 1.0f, 1.0f } },
-        { { 1.0f, 0.0f, 0.0f, 1.0f }, { 1.0f, 0.0f, 0.0f, 1.0f } }
+// Cube Functions
+void create_cube(void) {
+    const vertex_t vertices[8] = {
+        { { -.5f, -.5f,  .5f, 1 }, { 0, 0, 1, 1 } },
+        { { -.5f,  .5f,  .5f, 1 }, { 1, 0, 0, 1 } },
+        { {  .5f,  .5f,  .5f, 1 }, { 0, 1, 0, 1 } },
+        { {  .5f, -.5f,  .5f, 1 }, { 1, 1, 0, 1 } },
+        { { -.5f, -.5f, -.5f, 1 }, { 1, 1, 1, 1 } },
+        { { -.5f,  .5f, -.5f, 1 }, { 1, 0, 0, 1 } },
+        { {  .5f,  .5f, -.5f, 1 }, { 1, 0, 1, 1 } },
+        { {  .5f, -.5f, -.5f, 1 }, { 0, 0, 1, 1 } }
     };
 
-    // Define each triangle using the index of the vertices
-    GLubyte indices[] = {
-        // Top
-        0, 1, 3,
-        0, 3, 2,
-        3, 1, 4,
-        3, 4, 2,
-
-        0, 5, 7,
-        0, 7, 6,
-        7, 5, 8,
-        7, 8, 6,
-
-        0, 9, 11,
-        0, 11, 10,
-        11, 9, 12,
-        11, 12, 10,
-
-        0, 13, 15,
-        0, 15, 14,
-        15, 13, 16,
-        15, 16, 14
-
+    const GLuint indices[36] = {
+        0,2,1,  0,3,2,
+        4,3,0,  4,7,3,
+        4,1,5,  4,0,1,
+        3,6,2,  3,7,6,
+        1,6,5,  1,2,6,
+        7,5,6,  7,4,5
     };
 
-    GLubyte alternate[] = {
-        3, 4, 16,
-        3, 15, 16,
-        15, 16, 8,
-        15, 7, 8,
-        7, 8, 12,
-        7, 11, 12,
-        11, 12, 4,
-        11, 3, 4,
+    shaders[0] = glCreateProgram();
+    exit_on_glError("ERROR: Could not create shader.");
 
-        0, 11, 3,
-        0, 3, 15,
-        0, 15, 7,
-        0, 7, 11
+    shaders[1] = load_shader("simple.fragment.glsl", GL_FRAGMENT_SHADER);
+    shaders[2] = load_shader("simple.vertex.glsl", GL_VERTEX_SHADER);
+        glAttachShader(shaders[0], shaders[1]);
+        glAttachShader(shaders[0], shaders[2]);
+    glLinkProgram(shaders[0]);
+    exit_on_glError("ERROR: Could not link shader.");
 
-    };
+    model_uloc = glGetUniformLocation(shaders[0], "ModelMatrix");
+    view_uloc = glGetUniformLocation(shaders[0], "ViewMatrix");
+    proj_uloc = glGetUniformLocation(shaders[0], "ProjectionMatrix");
+    exit_on_glError("ERROR: Could not get shader uniform locations.");
 
-    GLenum error = glGetError();
+    glGenBuffers(2, &buffers[1]);
+    exit_on_glError("ERROR: Could not generate buffer objects.");
 
-    const size_t buffer_size = sizeof(vertices);
-    const size_t vertex_size = sizeof(vertices[0]);
-    const size_t color_offset = sizeof(vertices[0].v);
+    glGenVertexArrays(1, &buffers[0]);
+    exit_on_glError("ERROR: Could not generate VAO.");
+    glBindVertexArray(buffers[0]);
+    exit_on_glError("ERROR: Could not bind VAO.");
 
-    // Generate the Vertex Array Object and bind it.
-    glGenVertexArrays(1, &vao_id);
-    glBindVertexArray(vao_id);
 
-    // Generate the vertex buffer.
-    glGenBuffers(1, &vbo_id);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-    glBufferData(GL_ARRAY_BUFFER, buffer_size, vertices, GL_STATIC_DRAW);
-
-    // Define the data structure
-    // glVertexAttribPointer(layout, numvert, type, normalize, stride, ptr)
-    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, vertex_size, 0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, vertex_size, (GLvoid*)color_offset);
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
+    exit_on_glError("ERROR: Could not enable vertex attributes.");
 
-    // Create the index buffer that will contain the triangle declarations.
-    glGenBuffers(2, ibo_id);
+    glBindBuffer(GL_ARRAY_BUFFER, buffers[1]);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+    exit_on_glError("ERROR: Could not bind buffer to VAO.");
 
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[0]);
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(vertices[0]), (GLvoid*)0); // positions
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(vertices[0]), (GLvoid*)sizeof(vertices[0].pos)); // colors
+    exit_on_glError("ERROR: Could not set VAO attributes.");
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers[2]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[1]);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(alternate), alternate, GL_STATIC_DRAW);
-
-    // Use the buffer 0 first.
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[0]);
-
-    error = glGetError();
-
-    if (error != GL_NO_ERROR) {
-        fprintf(stderr, "ERROR: Could not create VBO: %s\n", gluErrorString(error));
-        exit(-1);
-    }
-
-}
-
-void delete_vbo(void) {
-    GLenum error = glGetError();
-
-    glDisableVertexAttribArray(1);
-    glDisableVertexAttribArray(0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glDeleteBuffers(1, &vbo_id);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); // Unbind the index buffer
-    glDeleteBuffers(2, ibo_id);
+    exit_on_glError("ERROR: Could not bind index buffer to VAO.");
 
     glBindVertexArray(0);
-    glDeleteVertexArrays(1, &vao_id);
-
-    error = glGetError();
-
-    if (error != GL_NO_ERROR) {
-        fprintf(stderr, "ERROR: Could not destroy VBO: %s\n", gluErrorString(error));
-        exit(-1);
-    }
 }
 
-void create_shaders(void) {
-    GLenum error = glGetError();
+void delete_cube(void) {
+    glDetachShader(shaders[0], shaders[1]);
+    glDetachShader(shaders[0], shaders[2]);
 
-    vertex_shader_id = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertex_shader_id, 1, &v_shader, NULL);
-    glCompileShader(vertex_shader_id);
+    glDeleteShader(shaders[1]);
+    glDeleteShader(shaders[2]);
+    glDeleteProgram(shaders[0]);
 
-    fragment_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragment_shader_id, 1, &f_shader, NULL);
-    glCompileShader(fragment_shader_id);
+    exit_on_glError("ERROR: Could not destroy shaders.");
 
-    prog_id = glCreateProgram();
-    glAttachShader(prog_id, vertex_shader_id);
-    glAttachShader(prog_id, fragment_shader_id);
-    glLinkProgram(prog_id);
-    glUseProgram(prog_id);
-
-    error = glGetError();
-    if (error != GL_NO_ERROR) {
-        fprintf(stderr, "ERROR: Could not create shaders: %s\n", gluErrorString(error));
-        exit(-1);
-    }
+    glDeleteBuffers(2, &buffers[1]);
+    glDeleteVertexArrays(1, &buffers[0]);
+    exit_on_glError("ERROR: Could not destroy buffers.");
 }
 
-void delete_shaders(void) {
-    GLenum error = glGetError();
+void draw_cube(void) {
+    float angle;
+    clock_t now = clock();
 
+    if (last_time == 0) last_time == now;
+
+    cube_rot += 360.0f * ((float)(now - last_time) / CLOCKS_PER_SEC);
+    angle = deg2rad(cube_rot);
+    last_time = now;
+
+    model_mat = IDENTITY4;
+    rot_y(&model_mat, angle);
+    rot_x(&model_mat, angle);
+
+    glUseProgram(shaders[0]);
+    exit_on_glError("ERROR: Could not use shader program.");
+
+    glUniformMatrix4fv(model_uloc, 1, GL_FALSE, model_mat.m);
+    glUniformMatrix4fv(view_uloc, 1, GL_FALSE, view_mat.m);
+    exit_on_glError("ERROR: Could not set shader uniforms.");
+
+    glBindVertexArray(buffers[0]);
+    exit_on_glError("ERROR: Could not bind VAO.");
+    glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, (GLvoid*)0);
+    exit_on_glError("ERROR: Failed to draw elements.");
+
+    // Unbind array
+    glBindVertexArray(0);
     glUseProgram(0);
-    glDetachShader(prog_id, vertex_shader_id);
-    glDetachShader(prog_id, fragment_shader_id);
-
-    glDeleteShader(fragment_shader_id);
-    glDeleteShader(vertex_shader_id);
-
-    error = glGetError();
-    if (error != GL_NO_ERROR) {
-        fprintf(stderr, "ERROR: Could not create shaders: %s\n", gluErrorString(error));
-        exit(-1);
-    }
 }
