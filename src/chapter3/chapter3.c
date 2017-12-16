@@ -16,7 +16,7 @@ int g_width = 500,
 
 unsigned int frames = 0;
 
-GLuint vertex_shader_id, fragment_shader_id, prog_id, vao_id, vbo_id, ibo_id;
+GLuint vertex_shader_id, fragment_shader_id, prog_id, vao_id, vbo_id, ibo_id[2], active_ibo = 0;
 
 // A very simple vertex shader
 const GLchar* v_shader = {
@@ -51,6 +51,7 @@ void render(void);
 // timer handler
 void on_timer(int);
 void on_idle(void);
+void on_keyboard(unsigned char, int, int);
 
 // shader stuff
 void cleanup(void);
@@ -111,6 +112,7 @@ void init_wnd(int argc, char* argv[]) {
     glutIdleFunc(on_idle);
     glutTimerFunc(0, on_timer, 0); // delay, func, arg
     glutCloseFunc(cleanup);
+    glutKeyboardFunc(on_keyboard);
 }
 
 void resize(int w, int h) {
@@ -127,7 +129,10 @@ void render(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the frame
 
     // glDrawArrays(GL_TRIANGLES, 0 , 3); // Drawing only triangles...
-    glDrawElements(GL_TRIANGLES, 48, GL_UNSIGNED_BYTE, (GLvoid*) 0);
+    if (active_ibo == 0)
+        glDrawElements(GL_TRIANGLES, 48, GL_UNSIGNED_BYTE, (GLvoid*) 0);
+    else
+        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_BYTE, (GLvoid*) 0);
 
     // Done painting, swap the buffer to the screen.
     glutSwapBuffers();
@@ -159,6 +164,19 @@ void on_timer(int val) {
 void cleanup(void) {
     delete_shaders();
     delete_vbo();
+}
+
+void on_keyboard(unsigned char key, int x, int y) {
+    switch (key) {
+        case 'T':
+        case 't':
+            {
+                active_ibo = active_ibo == 1 ? 0 : 1;
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[active_ibo]);
+                break;
+            }
+        default: break;
+    }
 }
 
 void create_vbo(void) {
@@ -214,6 +232,23 @@ void create_vbo(void) {
 
     };
 
+    GLubyte alternate[] = {
+        3, 4, 16,
+        3, 15, 16,
+        15, 16, 8,
+        15, 7, 8,
+        7, 8, 12,
+        7, 11, 12,
+        11, 12, 4,
+        11, 3, 4,
+
+        0, 11, 3,
+        0, 3, 15,
+        0, 15, 7,
+        0, 7, 11
+
+    };
+
     GLenum error = glGetError();
 
     const size_t buffer_size = sizeof(vertices);
@@ -237,9 +272,16 @@ void create_vbo(void) {
     glEnableVertexAttribArray(1);
 
     // Create the index buffer that will contain the triangle declarations.
-    glGenBuffers(1, &ibo_id);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
+    glGenBuffers(2, ibo_id);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[0]);
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[1]);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(alternate), alternate, GL_STATIC_DRAW);
+
+    // Use the buffer 0 first.
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id[0]);
 
     error = glGetError();
 
@@ -260,7 +302,7 @@ void delete_vbo(void) {
     glDeleteBuffers(1, &vbo_id);
 
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); // Unbind the index buffer
-    glDeleteBuffers(1, &ibo_id);
+    glDeleteBuffers(2, ibo_id);
 
     glBindVertexArray(0);
     glDeleteVertexArrays(1, &vao_id);
