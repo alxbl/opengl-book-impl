@@ -60,6 +60,10 @@ void init(int argc, char* argv[]) {
 
     // Setup culling
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    exit_on_glError("ERROR: Could not set depth testing.");
+
+    glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
     exit_on_glError("ERROR: Unable to configure culling.");
