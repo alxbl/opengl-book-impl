@@ -1,51 +1,63 @@
 #include "math/utils.h"
 
-#define WINDOW_TITLE_PREFIX "Chapter 4"
+#define WINDOW_TITLE_PREFIX "Chapter 4 (GLFW)"
 
 int g_width = 500,
-    g_height = 500,
-    g_hwnd = 0;
-
+    g_height = 500;
+GLFWwindow* g_hwnd = NULL; // Render Window Handle
 unsigned int frames = 0;
-
 GLuint proj_uloc, view_uloc, model_uloc, buffers[3] = { 0 }, shaders[3] = {0};
-
 mat4_t proj_mat, view_mat, model_mat;
 
 float cube_rot = 0;
-clock_t last_time = 0;
+float last_time = 0;
 
+void on_error(int error, const char* desc);
 void init(int, char*[]);
 void init_wnd(int, char*[]);
-void resize(int, int);
+void resize(GLFWwindow*, int, int);
 void render(void);
 
-// timer handler
-void on_timer(int);
+void update_fps(float elapsed);
 void on_idle(void);
 
 // Cube functions
 void create_cube(void);
 void delete_cube(void);
 void draw_cube(void);
-
-void on_keyboard(unsigned char, int, int);
-
-// shader stuff
+void on_keyboard(GLFWwindow*, int, int, int, int);
 void cleanup(void);
 
 int main(int argc, char* argv[]) {
     init(argc, argv);
-    glutMainLoop();
+
+    // Rendering loop.
+    float now, prev, delta;
+    now = prev = glfwGetTime();
+    update_fps(0);
+    while (!glfwWindowShouldClose(g_hwnd)) {
+        render();
+        now = glfwGetTime();
+        delta = now - prev;
+        ++frames;
+        if ( delta > 1) {
+            update_fps(delta);
+            prev = now;
+        }
+
+        glfwPollEvents();
+    }
     printf("Exiting...\n");
+
+    glfwDestroyWindow(g_hwnd);
+    glfwTerminate(); // GLFW must be terminated before the application exits
     exit(EXIT_SUCCESS);
 }
 
 void init(int argc, char* argv[]) {
-    GLenum glew_res;
-
     init_wnd(argc, argv);
 
+    GLenum glew_res;
     glew_res = glewInit();
 
     if (glew_res != GLEW_OK) {
@@ -54,6 +66,7 @@ void init(int argc, char* argv[]) {
     }
 
     fprintf(stdout, "Open GL Version: %s\n", glGetString(GL_VERSION));
+
 
     glGetError();
     glClearColor(0., 0., 0., 0.);
@@ -75,38 +88,39 @@ void init(int argc, char* argv[]) {
     translate(&view_mat, 0, 0, -2);
 
     create_cube();
+
+    // Initialize the viewport.
+    glfwSetFramebufferSizeCallback(g_hwnd, resize);
+    glfwGetFramebufferSize(g_hwnd, &g_width, &g_height);
+    resize(g_hwnd, g_width, g_height); // Initial resize call.
+
+    // Configure Event callbacks
+    glfwSetKeyCallback(g_hwnd, on_keyboard);
 }
 
 void init_wnd(int argc, char* argv[]) {
-    glutInit(&argc, argv); // Initialize the OpenGL engine
+    // Initialize GLFW
+    if (!glfwInit()) {
+        fprintf(stderr, "ERROR: Failed to initialize GLFW.\n");
+        exit(EXIT_FAILURE);
+    }
 
-    glutInitContextVersion(4,0);
-    glutInitContextFlags(GLUT_FORWARD_COMPATIBLE);
-    glutInitContextProfile(GLUT_CORE_PROFILE);
+    // Add a callback to be notified about GLFW errors.
+    glfwSetErrorCallback(on_error); 
 
-    glutSetOption(
-            GLUT_ACTION_ON_WINDOW_CLOSE,
-            GLUT_ACTION_GLUTMAINLOOP_RETURNS
-            );
+    // Create the rendering viewport.
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // Require OpenGL > 4
+    g_hwnd = glfwCreateWindow(g_width, g_height, WINDOW_TITLE_PREFIX, NULL, NULL);
 
-    glutInitWindowSize(g_width, g_height);
-    glutInitDisplayMode(GLUT_DEPTH | GLUT_DOUBLE | GLUT_RGBA);
-    g_hwnd = glutCreateWindow(WINDOW_TITLE_PREFIX);
-
-    if (g_hwnd < 1) {
+    if (!g_hwnd) {
         fprintf(stderr, "ERROR: Could not create rendering window!\n");
         exit(1);
     }
 
-    glutReshapeFunc(resize);
-    glutDisplayFunc(render);
-    glutIdleFunc(on_idle);
-    glutTimerFunc(0, on_timer, 0); // delay, func, arg
-    glutCloseFunc(cleanup);
-    glutKeyboardFunc(on_keyboard);
+    glfwMakeContextCurrent(g_hwnd);
 }
 
-void resize(int w, int h) {
+void resize(GLFWwindow* wnd, int w, int h) {
     g_width = w;
     g_height = h;
 
@@ -121,51 +135,33 @@ void resize(int w, int h) {
 }
 
 void render(void) {
-    ++frames;
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the frame
-
     draw_cube();
+    glfwSwapBuffers(g_hwnd);
 
-    // Done painting, swap the buffer to the screen.
-    glutSwapBuffers();
-    glutPostRedisplay();
 }
 
-void on_idle(void) {
-    glutPostRedisplay();
-}
+void update_fps(float elapsed) {
+    char* title = (char*) malloc(512 + strlen(WINDOW_TITLE_PREFIX));
+    sprintf(title, "%s (%.2f fps @ %d x %d)",
+            WINDOW_TITLE_PREFIX,
+            elapsed > 0. ? (float)frames / elapsed : 0.,
+            g_width,
+            g_height
+    );
 
-void on_timer(int val) {
-    if (val != 0) {
-        char* title = (char*) malloc(512 + strlen(WINDOW_TITLE_PREFIX));
-        sprintf(title, "%s (%d fps @ %d x %d)",
-                WINDOW_TITLE_PREFIX,
-                frames * 4, // 250ms
-                g_width,
-                g_height
-               );
-
-        glutSetWindowTitle(title);
-        free(title);
-    }
-
+    glfwSetWindowTitle(g_hwnd, title);
+    free(title);
     frames = 0; // reset frame counter.
-    glutTimerFunc(250, on_timer, 1); // Re-arm the timer.
 }
 
 void cleanup(void) {
     delete_cube();
 }
 
-void on_keyboard(unsigned char key, int x, int y) {
-    switch (key) {
-        case 'T':
-        case 't':
-            {
-                break;
-            }
-        default: break;
-    }
+void on_keyboard(GLFWwindow* wnd, int key, int scan, int action, int mods) {
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+        glfwSetWindowShouldClose(g_hwnd, GLFW_TRUE);
 }
 
 // Cube Functions
@@ -195,8 +191,8 @@ void create_cube(void) {
 
     shaders[1] = load_shader("simple.fragment.glsl", GL_FRAGMENT_SHADER);
     shaders[2] = load_shader("simple.vertex.glsl", GL_VERTEX_SHADER);
-        glAttachShader(shaders[0], shaders[1]);
-        glAttachShader(shaders[0], shaders[2]);
+    glAttachShader(shaders[0], shaders[1]);
+    glAttachShader(shaders[0], shaders[2]);
     glLinkProgram(shaders[0]);
     exit_on_glError("ERROR: Could not link shader.");
 
@@ -212,7 +208,6 @@ void create_cube(void) {
     exit_on_glError("ERROR: Could not generate VAO.");
     glBindVertexArray(buffers[0]);
     exit_on_glError("ERROR: Could not bind VAO.");
-
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
@@ -250,11 +245,11 @@ void delete_cube(void) {
 
 void draw_cube(void) {
     float angle;
-    clock_t now = clock();
+    float now = glfwGetTime();
 
-    if (last_time == 0) last_time == now;
+    if (last_time == 0.) last_time = now;
 
-    cube_rot += 360.0f * ((float)(now - last_time) / CLOCKS_PER_SEC);
+    cube_rot += 45.0f * ((float)(now - last_time));
     angle = deg2rad(cube_rot);
     last_time = now;
 
@@ -277,4 +272,9 @@ void draw_cube(void) {
     // Unbind array
     glBindVertexArray(0);
     glUseProgram(0);
+}
+
+void on_error(int error, const char* desc) {
+    fprintf(stderr, "ERROR (%d): %s.\n", error, desc);
+    exit(EXIT_FAILURE);
 }
