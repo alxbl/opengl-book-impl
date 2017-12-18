@@ -9,6 +9,15 @@ unsigned int frames = 0;
 GLuint proj_uloc, view_uloc, model_uloc, buffers[3] = { 0 }, shaders[3] = {0};
 mat4_t proj_mat, view_mat, model_mat;
 
+// Camera Direction
+typedef enum dir_ {
+    DIR_UP,
+    DIR_DOWN,
+    DIR_LEFT,
+    DIR_RIGHT
+} dir_t;
+int g_dir[4] = { 0 }; // up, down, left, right
+
 float cube_rot = 0;
 float last_time = 0;
 
@@ -19,14 +28,35 @@ void resize(GLFWwindow*, int, int);
 void render(void);
 
 void update_fps(float elapsed);
-void on_idle(void);
+void cleanup(void);
 
 // Cube functions
 void create_cube(void);
 void delete_cube(void);
 void draw_cube(void);
+
+// Input Handling
 void on_keyboard(GLFWwindow*, int, int, int, int);
-void cleanup(void);
+
+void update_cam(void) {
+    static float prev = 0.;
+    if (!prev) prev = glfwGetTime();
+
+    float dt = glfwGetTime();
+    float dx = 0., dz = 0.;
+    // The thing to keep in mind with camera movement is that the
+    // viewport itself doesn't move. We translate/rotate the world
+    // relative to the camera.
+    if (g_dir[DIR_LEFT])  dx += 1; // Camera panning left: Translate the world to the right (+x)
+    if (g_dir[DIR_RIGHT]) dx -= 1; // Camera panning right: Translate to the left (-x)
+    if (g_dir[DIR_UP])    dz += 1; // Camera panning forward: Translate the world towards the screen (+z)
+    if (g_dir[DIR_DOWN])  dz -= 1; // Camera panning backward: Translate the world away from screen (-z)
+    // Scale movement with elapsed time in order to be FPS independent.
+    dx *= 0.02 * dt;
+    dz *= 0.02 * dt;
+    translate(&view_mat, dx, 0, dz);
+    prev = dt;
+}
 
 int main(int argc, char* argv[]) {
     init(argc, argv);
@@ -106,7 +136,7 @@ void init_wnd(int argc, char* argv[]) {
     }
 
     // Add a callback to be notified about GLFW errors.
-    glfwSetErrorCallback(on_error); 
+    glfwSetErrorCallback(on_error);
 
     // Create the rendering viewport.
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4); // Require OpenGL > 4
@@ -136,6 +166,7 @@ void resize(GLFWwindow* wnd, int w, int h) {
 
 void render(void) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the frame
+    update_cam();
     draw_cube();
     glfwSwapBuffers(g_hwnd);
 
@@ -159,9 +190,23 @@ void cleanup(void) {
     delete_cube();
 }
 
+void handle_dir(dir_t dir, int action) {
+    g_dir[dir] = (action == GLFW_PRESS || action == GLFW_REPEAT) ? 1 : 0;
+}
+
 void on_keyboard(GLFWwindow* wnd, int key, int scan, int action, int mods) {
-    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
+    if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(g_hwnd, GLFW_TRUE);
+        return;
+    }
+
+    switch (key) {
+        case GLFW_KEY_W: handle_dir(DIR_UP, action); break;
+        case GLFW_KEY_A: handle_dir(DIR_LEFT, action); break;
+        case GLFW_KEY_S: handle_dir(DIR_DOWN, action); break;
+        case GLFW_KEY_D: handle_dir(DIR_RIGHT, action); break;
+    }
+
 }
 
 // Cube Functions
